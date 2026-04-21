@@ -2,14 +2,14 @@
 /**
  * Usage: node scripts/add-trails.js "Trail Name 1" "Trail Name 2" ...
  *
- * Requires: npm install @anthropic-ai/sdk
- * Set env var: ANTHROPIC_API_KEY=sk-ant-...
+ * Requires: npm install @google/generative-ai
+ * Get a free API key at: https://aistudio.google.com/apikey
+ * Set env var: GEMINI_API_KEY=your-key-here
  *
- * Looks up each trail name via Claude, generates structured JSON,
- * and merges the new entries into trails.json.
+ * Free tier: 1,500 requests/day — plenty for adding trails.
  */
 
-import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -28,41 +28,31 @@ const REGIONS = [
   'East/Southeast'
 ];
 
-const SYSTEM_PROMPT = `You are a knowledgeable backpacking guide with expertise in US wilderness trails.
-Given a trail name, return a single JSON object (no markdown, no explanation) with these exact fields:
+const PROMPT_TEMPLATE = (name) => `
+You are a knowledgeable backpacking guide. Given this trail name, return ONLY a valid JSON object with no markdown or explanation.
 
+Trail name: ${name}
+
+Required fields:
 {
-  "name": "exact trail name as provided",
+  "name": "${name}",
   "location": "Park/Wilderness, State abbreviation",
   "coords": [latitude, longitude],
-  "iconic": true or false (is this a well-known bucket-list trail?),
+  "iconic": true or false,
   "region": one of: ${REGIONS.map(r => `"${r}"`).join(', ')},
-  "distance": "human-readable distance string e.g. '22 mi RT' or '40 mi loop'",
-  "distanceMiles": numeric miles (use midpoint if range, one-way distance for point-to-point),
-  "days": "typical trip length e.g. '2–3 days'",
-  "season": "best season window e.g. 'July – September'",
-  "difficulty": integer 1–5 (1=easy walk, 3=moderate, 5=strenuous/mountaineering),
+  "distance": "human-readable e.g. '22 mi RT' or '40 mi loop'",
+  "distanceMiles": numeric (midpoint if range; one-way for point-to-point),
+  "days": "typical trip e.g. '2–3 days'",
+  "season": "best window e.g. 'July – September'",
+  "difficulty": integer 1–5 (1=easy, 3=moderate, 5=strenuous/technical),
   "permit": one of: "lottery", "reservation", "walkup", "none",
-  "permitNote": "2–3 sentence description of permit process, cost, timing, and key logistics"
+  "permitNote": "2–3 sentences on permit process, cost, timing, key logistics"
 }
+`;
 
-Rules:
-- coords must be accurate GPS coordinates for the trailhead or midpoint
-- If a trail is not in the US, still fill in all fields as best you can
-- difficulty 4 = hard backpacking, 5 = requires technical skills or extreme elevation
-- For permit, use "none" only if truly no permit of any kind is required
-- Keep permitNote concise and actionable`;
-
-async function fetchTrailData(client, name) {
-  const msg = await client.messages.create({
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: 600,
-    system: SYSTEM_PROMPT,
-    messages: [{ role: 'user', content: `Trail name: ${name}` }]
-  });
-
-  const text = msg.content[0].text.trim();
-  // Strip markdown fences if present
+async function fetchTrailData(model, name) {
+  const result = await model.generateContent(PROMPT_TEMPLATE(name));
+  const text = result.response.text().trim();
   const json = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
   return JSON.parse(json);
 }
@@ -74,15 +64,16 @@ async function main() {
     process.exit(1);
   }
 
-  if (!process.env.ANTHROPIC_API_KEY) {
-    console.error('Error: ANTHROPIC_API_KEY environment variable not set.');
-    console.error('Set it with: export ANTHROPIC_API_KEY=sk-ant-...');
+  if (!process.env.GEMINI_API_KEY) {
+    console.error('Error: GEMINI_API_KEY not set.');
+    console.error('Get a free key at: https://aistudio.google.com/apikey');
+    console.error('Then run: set GEMINI_API_KEY=your-key-here');
     process.exit(1);
   }
 
-  const client = new Anthropic();
+  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-lite' });
 
-  // Load existing trails
   let existing = [];
   if (fs.existsSync(TRAILS_FILE)) {
     existing = JSON.parse(fs.readFileSync(TRAILS_FILE, 'utf8'));
@@ -101,7 +92,7 @@ async function main() {
 
     process.stdout.write(`🔍 Looking up "${name}"...`);
     try {
-      const trail = await fetchTrailData(client, name);
+      const trail = await fetchTrailData(model, name);
       existing.push(trail);
       added.push(trail.name);
       console.log(` ✓ Added (${trail.region}, difficulty ${trail.difficulty})`);
@@ -116,10 +107,6 @@ async function main() {
     console.log(`   Added: ${added.join(', ')}`);
   } else {
     console.log('\nNo new trails added.');
-  }
-
-  if (skipped.length > 0) {
-    console.log(`   Skipped (duplicates): ${skipped.join(', ')}`);
   }
 }
 

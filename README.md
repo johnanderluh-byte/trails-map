@@ -30,16 +30,18 @@ The `scripts/add-trails.js` script uses Claude to automatically generate trail d
 **Setup (one time):**
 ```bash
 npm install
-export ANTHROPIC_API_KEY=sk-ant-...   # Windows: set ANTHROPIC_API_KEY=sk-ant-...
+# Get a free key at https://aistudio.google.com/apikey (no credit card needed)
+set GEMINI_API_KEY=your-key-here    # Windows
+export GEMINI_API_KEY=your-key-here # Mac/Linux
 ```
 
 **Add trails:**
 ```bash
-node scripts/add-trails.js "Boundary Waters Canoe Area" "Havasupai" "Long Trail"
+node scripts/add-trails.js "Boundary Waters Canoe Area" "Long Trail VT" "Bob Marshall Wilderness"
 ```
 
 The script will:
-1. Look up each trail via Claude (haiku model, ~$0.001/trail)
+1. Look up each trail via Gemini 2.0 Flash Lite (free — 1,500/day)
 2. Skip any already in `trails.json`
 3. Merge new entries and save the file
 
