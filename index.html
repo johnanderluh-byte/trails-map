@@ -673,7 +673,12 @@ function buildRegionFilters() {
   regions.forEach(r => {
     const label = document.createElement('label');
     label.className = 'check-item';
-    label.innerHTML = `<input type="checkbox" checked value="${r}"> ${r}`;
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = true;
+    cb.value = r;
+    label.appendChild(cb);
+    label.appendChild(document.createTextNode(' ' + r));
     container.appendChild(label);
   });
 }
