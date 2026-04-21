@@ -1,0 +1,119 @@
+name: Add Trails
+
+on:
+  workflow_dispatch:
+    inputs:
+      trail_names:
+        description: "Trail names — one per line"
+        required: true
+        type: string
+
+jobs:
+  add-trails:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Look up trails and update trails.json
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          TRAIL_NAMES: ${{ inputs.trail_names }}
+        run: |
+          node << 'EOF'
+          import fs from 'fs';
+
+          const REGIONS = [
+            'Sierra Nevada','Pacific Northwest','Cascades/Oregon',
+            'Rocky Mountains','Southwest','Northern Rockies','Alaska','East/Southeast'
+          ];
+
+          const SYSTEM = `You are a knowledgeable backpacking guide. Given a trail name, return ONLY a valid JSON object with no markdown or explanation.
+          Required fields:
+          {
+            "name": "exact trail name as given",
+            "location": "Park/Wilderness, State abbreviation",
+            "coords": [latitude, longitude],
+            "iconic": true or false,
+            "region": one of: ${REGIONS.map(r => `"${r}"`).join(', ')},
+            "distance": "human-readable e.g. '22 mi RT'",
+            "distanceMiles": numeric miles,
+            "days": "e.g. '2–3 days'",
+            "season": "e.g. 'July – September'",
+            "difficulty": integer 1-5,
+            "permit": one of: "lottery","reservation","walkup","none",
+            "permitNote": "2–3 sentences on permit process, cost, and key logistics"
+          }`;
+
+          async function lookupTrail(name) {
+            const res = await fetch('https://api.anthropic.com/v1/messages', {
+              method: 'POST',
+              headers: {
+                'x-api-key': process.env.ANTHROPIC_API_KEY,
+                'anthropic-version': '2023-06-01',
+                'content-type': 'application/json'
+              },
+              body: JSON.stringify({
+                model: 'claude-haiku-4-5-20251001',
+                max_tokens: 600,
+                system: SYSTEM,
+                messages: [{ role: 'user', content: `Trail name: ${name}` }]
+              })
+            });
+            const data = await res.json();
+            const text = data.content[0].text.trim()
+              .replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
+            return JSON.parse(text);
+          }
+
+          const names = process.env.TRAIL_NAMES
+            .split('\n').map(s => s.trim()).filter(Boolean);
+
+          let trails = JSON.parse(fs.readFileSync('trails.json', 'utf8'));
+          const existing = new Set(trails.map(t => t.name.toLowerCase()));
+
+          let added = [];
+          for (const name of names) {
+            if (existing.has(name.toLowerCase())) {
+              console.log(`Skipping "${name}" — already exists`);
+              continue;
+            }
+            try {
+              process.stdout.write(`Looking up "${name}"...`);
+              const trail = await lookupTrail(name);
+              trails.push(trail);
+              added.push(trail.name);
+              console.log(` ✓ (${trail.region}, difficulty ${trail.difficulty})`);
+            } catch (e) {
+              console.log(` ✗ ${e.message}`);
+            }
+          }
+
+          if (added.length > 0) {
+            fs.writeFileSync('trails.json', JSON.stringify(trails, null, 2));
+            console.log(`\nAdded: ${added.join(', ')}`);
+            fs.writeFileSync('/tmp/added.txt', added.join(', '));
+          } else {
+            fs.writeFileSync('/tmp/added.txt', '');
+          }
+          EOF
+
+      - name: Commit and push
+        run: |
+          ADDED=$(cat /tmp/added.txt)
+          if [ -n "$ADDED" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add trails.json
+            git commit -m "Add trails: $ADDED"
+            git push
+            echo "✅ Map updated with: $ADDED"
+          else
+            echo "No new trails to commit."
+          fi
