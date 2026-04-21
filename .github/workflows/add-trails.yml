@@ -23,7 +23,7 @@ jobs:
 
       - name: Look up trails and update trails.json
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           TRAIL_NAMES: ${{ inputs.trail_names }}
         run: |
           node << 'EOF'
@@ -52,22 +52,19 @@ jobs:
           }`;
 
           async function lookupTrail(name) {
-            const res = await fetch('https://api.anthropic.com/v1/messages', {
+            const key = process.env.GEMINI_API_KEY;
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`;
+            const res = await fetch(url, {
               method: 'POST',
-              headers: {
-                'x-api-key': process.env.ANTHROPIC_API_KEY,
-                'anthropic-version': '2023-06-01',
-                'content-type': 'application/json'
-              },
+              headers: { 'content-type': 'application/json' },
               body: JSON.stringify({
-                model: 'claude-haiku-4-5-20251001',
-                max_tokens: 600,
-                system: SYSTEM,
-                messages: [{ role: 'user', content: `Trail name: ${name}` }]
+                contents: [{ parts: [{ text: `${SYSTEM}\n\nTrail name: ${name}` }] }],
+                generationConfig: { maxOutputTokens: 600 }
               })
             });
             const data = await res.json();
-            const text = data.content[0].text.trim()
+            if (data.error) throw new Error(data.error.message);
+            const text = data.candidates[0].content.parts[0].text.trim()
               .replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
             return JSON.parse(text);
           }
