@@ -1,0 +1,13 @@
+{
+  "name": "trails-map",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Interactive US backpacking trails atlas",
+  "scripts": {
+    "serve": "npx serve .",
+    "add-trails": "node scripts/add-trails.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.36.0"
+  }
+}

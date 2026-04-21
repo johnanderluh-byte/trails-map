@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Great American Backpacking Trails — An Interactive Atlas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;0,9..144,900;1,9..144,400&family=JetBrains+Mono:wght@400;500&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  :root {
+    --paper: #f1ead9;
+    --paper-dark: #e6dcc2;
+    --ink: #1f2a22;
+    --ink-soft: #3a4a3e;
+    --forest: #2f5033;
+    --moss: #627f4f;
+    --rust: #a24b20;
+    --sun: #c88a28;
+    --sky: #7ba0a8;
+    --line: rgba(31, 42, 34, 0.18);
+    --sidebar-w: 272px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    font-family: 'Inter', sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+    background-image:
+      radial-gradient(circle at 20% 10%, rgba(98, 127, 79, 0.08), transparent 50%),
+      radial-gradient(circle at 80% 80%, rgba(162, 75, 32, 0.06), transparent 50%);
+  }
+
+  /* ── Masthead ── */
+  .masthead {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 1000;
+    height: 54px;
+    padding: 0 20px 0 16px;
+    background: rgba(241, 234, 217, 0.97);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--line);
+    backdrop-filter: blur(6px);
+    gap: 12px;
+  }
+  .masthead-left { display: flex; align-items: center; gap: 10px; }
+  .sidebar-toggle {
+    background: none;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    width: 34px;
+    height: 30px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 0;
+    transition: border-color 0.15s;
+    flex-shrink: 0;
+  }
+  .sidebar-toggle:hover { border-color: var(--ink); }
+  .sidebar-toggle span {
+    display: block;
+    width: 14px;
+    height: 1.5px;
+    background: var(--ink);
+    border-radius: 1px;
+    transition: transform 0.2s ease, opacity 0.2s ease;
+  }
+  .sidebar-toggle.active span:nth-child(1) { transform: translateY(5.5px) rotate(45deg); }
+  .sidebar-toggle.active span:nth-child(2) { opacity: 0; }
+  .sidebar-toggle.active span:nth-child(3) { transform: translateY(-5.5px) rotate(-45deg); }
+  .masthead .brand {
+    font-family: 'Fraunces', serif;
+    font-weight: 900;
+    font-size: 20px;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+    white-space: nowrap;
+  }
+  .masthead .brand em {
+    font-style: italic;
+    font-weight: 400;
+    color: var(--moss);
+  }
+  .masthead .sub {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    white-space: nowrap;
+  }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    position: fixed;
+    top: 54px;
+    left: 0;
+    bottom: 0;
+    z-index: 800;
+    width: var(--sidebar-w);
+    background: var(--paper);
+    border-right: 1px solid var(--line);
+    overflow-y: auto;
+    transform: translateX(calc(-1 * var(--sidebar-w)));
+    transition: transform 0.22s ease;
+    display: flex;
+    flex-direction: column;
+  }
+  .sidebar.open { transform: translateX(0); }
+
+  .sidebar-body { padding: 16px; flex: 1; }
+
+  .filter-section { margin-bottom: 18px; }
+  .filter-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--rust);
+    margin-bottom: 8px;
+    display: block;
+  }
+
+  .filter-select {
+    width: 100%;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    padding: 6px 8px;
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+    color: var(--ink);
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%233a4a3e'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    padding-right: 24px;
+  }
+  .filter-select:focus { outline: 1px solid var(--moss); }
+
+  .check-list { display: flex; flex-direction: column; gap: 5px; }
+  .check-item {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12px;
+    color: var(--ink-soft);
+    cursor: pointer;
+    user-select: none;
+  }
+  .check-item input[type="checkbox"] {
+    accent-color: var(--forest);
+    width: 13px;
+    height: 13px;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+
+  .diff-row { display: flex; gap: 5px; }
+  .diff-pill {
+    flex: 1;
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    background: var(--paper);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    text-align: center;
+    padding: 4px 0;
+    cursor: pointer;
+    color: var(--ink-soft);
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
+  }
+  .diff-pill.active { background: var(--forest); color: var(--paper); border-color: var(--forest); }
+
+  .sidebar-footer {
+    border-top: 1px solid var(--line);
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    background: var(--paper);
+  }
+  .result-count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    color: var(--ink-soft);
+  }
+  .result-count strong {
+    font-weight: 500;
+    color: var(--forest);
+  }
+  .btn-reset {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    background: none;
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    padding: 4px 8px;
+    color: var(--ink-soft);
+    cursor: pointer;
+    transition: border-color 0.12s, color 0.12s;
+  }
+  .btn-reset:hover { border-color: var(--rust); color: var(--rust); }
+
+  /* ── Map ── */
+  #map {
+    position: absolute;
+    top: 54px; left: 0; right: 0; bottom: 0;
+    background: var(--paper);
+    z-index: 1;
+    transition: left 0.22s ease;
+  }
+  body.sidebar-open #map { left: var(--sidebar-w); }
+  .leaflet-container { background: var(--paper) !important; font-family: 'Inter', sans-serif; }
+
+  /* ── Markers ── */
+  .trail-marker {
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: var(--forest);
+    border: 2.5px solid var(--paper);
+    box-shadow: 0 2px 6px rgba(31, 42, 34, 0.35);
+    cursor: pointer;
+    transition: transform 0.15s ease, background 0.15s ease;
+    position: relative;
+  }
+  .trail-marker::after {
+    content: '';
+    position: absolute;
+    inset: -6px;
+    border: 1.5px solid transparent;
+    border-radius: 50%;
+    transition: border-color 0.2s ease;
+  }
+  .trail-marker:hover { transform: scale(1.25); background: var(--rust); }
+  .trail-marker:hover::after { border-color: var(--rust); }
+  .trail-marker.iconic { background: var(--rust); }
+  .trail-marker.iconic:hover { background: var(--sun); }
+  .trail-marker.status-want::before {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: 50%;
+    border: 2px dashed var(--sun);
+  }
+  .trail-marker.status-done::before {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: 50%;
+    border: 2px solid var(--moss);
+  }
+
+  /* ── Popup ── */
+  .leaflet-popup-content-wrapper {
+    background: var(--paper);
+    border-radius: 2px;
+    border: 1px solid var(--ink);
+    box-shadow: 6px 6px 0 rgba(31, 42, 34, 0.12);
+    padding: 0;
+  }
+  .leaflet-popup-tip { background: var(--paper); border: 1px solid var(--ink); }
+  .leaflet-popup-content { margin: 0 !important; width: 320px !important; line-height: 1.5; }
+  .leaflet-popup-close-button { color: var(--ink-soft) !important; font-size: 22px !important; padding: 8px 10px 0 0 !important; }
+
+  .trail-card { padding: 18px 20px 14px; }
+  .trail-card .kicker {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; letter-spacing: 0.18em;
+    text-transform: uppercase; color: var(--rust); margin-bottom: 6px;
+  }
+  .trail-card h3 {
+    font-family: 'Fraunces', serif;
+    font-weight: 700; font-size: 22px;
+    line-height: 1.15; color: var(--ink);
+    margin-bottom: 4px; letter-spacing: -0.015em;
+  }
+  .trail-card .location {
+    font-family: 'Fraunces', serif;
+    font-style: italic; font-size: 13px;
+    color: var(--ink-soft); margin-bottom: 14px;
+  }
+  .trail-card .stats {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 10px 14px; padding: 12px 0;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 12px;
+  }
+  .stat .label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; letter-spacing: 0.15em;
+    text-transform: uppercase; color: var(--ink-soft);
+    display: block; margin-bottom: 2px;
+  }
+  .stat .value { font-size: 13px; color: var(--ink); font-weight: 500; }
+  .difficulty { display: inline-flex; align-items: center; gap: 3px; }
+  .difficulty .pip { width: 8px; height: 8px; border-radius: 50%; background: var(--line); }
+  .difficulty .pip.on { background: var(--forest); }
+  .difficulty .pip.on.hard { background: var(--rust); }
+  .trail-card .permit {
+    font-size: 12px; color: var(--ink-soft);
+    line-height: 1.45; padding-top: 2px;
+  }
+  .trail-card .permit strong { color: var(--ink); font-weight: 600; }
+  .permit-badge {
+    display: inline-block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; letter-spacing: 0.12em;
+    text-transform: uppercase; padding: 2px 6px;
+    margin-right: 6px; border-radius: 2px;
+  }
+  .permit-badge.lottery { background: var(--rust); color: var(--paper); }
+  .permit-badge.reservation { background: var(--sun); color: var(--ink); }
+  .permit-badge.walkup { background: var(--moss); color: var(--paper); }
+  .permit-badge.none { background: var(--sky); color: var(--paper); }
+
+  /* Status toggle in popup */
+  .trail-status {
+    display: flex; gap: 8px;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+    margin-top: 12px;
+  }
+  .status-btn {
+    flex: 1;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; letter-spacing: 0.1em;
+    text-transform: uppercase;
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    padding: 6px 4px;
+    background: var(--paper);
+    color: var(--ink-soft);
+    cursor: pointer;
+    transition: all 0.15s;
+    text-align: center;
+  }
+  .status-btn:hover { border-color: var(--ink); color: var(--ink); }
+  .status-btn.active-want { background: var(--sun); border-color: var(--sun); color: var(--ink); }
+  .status-btn.active-done { background: var(--forest); border-color: var(--forest); color: var(--paper); }
+
+  /* ── Legend ── */
+  .legend {
+    position: fixed;
+    bottom: 20px; right: 20px;
+    z-index: 1000;
+    background: var(--paper);
+    border: 1px solid var(--ink);
+    padding: 14px 18px;
+    max-width: 240px;
+    box-shadow: 4px 4px 0 rgba(31, 42, 34, 0.12);
+  }
+  .legend h4 { font-family: 'Fraunces', serif; font-weight: 700; font-size: 14px; margin-bottom: 10px; letter-spacing: -0.01em; }
+  .legend .row { display: flex; align-items: center; gap: 10px; font-size: 11px; color: var(--ink-soft); margin-bottom: 6px; font-family: 'JetBrains Mono', monospace; letter-spacing: 0.03em; }
+  .legend .dot { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid var(--paper); box-shadow: 0 1px 3px rgba(31, 42, 34, 0.3); flex-shrink: 0; }
+  .legend .dot.std { background: var(--forest); }
+  .legend .dot.iconic { background: var(--rust); }
+  .legend .dot.want { background: var(--sun); }
+  .legend .dot.done { background: var(--moss); }
+  .legend .hint { font-family: 'Fraunces', serif; font-style: italic; font-size: 12px; color: var(--ink-soft); margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line); line-height: 1.4; }
+
+  /* ── Count badge ── */
+  .count-badge {
+    position: fixed;
+    top: 62px; right: 20px;
+    z-index: 1000;
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-size: 13px;
+    color: var(--ink-soft);
+    text-align: right;
+    pointer-events: none;
+  }
+  .count-badge strong { font-style: normal; font-weight: 900; font-size: 28px; color: var(--forest); display: block; line-height: 1; margin-bottom: 2px; }
+
+  /* ── Leaflet overrides ── */
+  .leaflet-control-zoom a { background: var(--paper) !important; color: var(--ink) !important; border: 1px solid var(--ink) !important; font-family: 'Fraunces', serif !important; font-weight: 600 !important; }
+  .leaflet-control-attribution { background: rgba(241, 234, 217, 0.8) !important; font-size: 9px !important; font-family: 'JetBrains Mono', monospace !important; }
+
+  /* ── Mobile ── */
+  @media (max-width: 640px) {
+    :root { --sidebar-w: 100vw; }
+    body.sidebar-open #map { left: 0; }
+    .masthead .brand { font-size: 16px; }
+    .masthead .sub { display: none; }
+    .legend { max-width: 200px; padding: 10px 12px; bottom: 10px; right: 10px; }
+    .legend .hint { display: none; }
+    .count-badge { top: 62px; right: 12px; }
+    .leaflet-popup-content { width: 272px !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="masthead">
+  <div class="masthead-left">
+    <button class="sidebar-toggle" id="sidebarToggle" title="Filters &amp; Sort" aria-label="Toggle filters">
+      <span></span><span></span><span></span>
+    </button>
+    <div class="brand">Great American Trails <em>— an atlas</em></div>
+  </div>
+  <div class="sub" id="mastSub">loading…</div>
+</div>
+
+<!-- Filter sidebar -->
+<div class="sidebar" id="sidebar">
+  <div class="sidebar-body">
+
+    <div class="filter-section">
+      <span class="filter-title">Sort by</span>
+      <select class="filter-select" id="sortBy">
+        <option value="name">Name A–Z</option>
+        <option value="diff-desc">Difficulty (hardest first)</option>
+        <option value="diff-asc">Difficulty (easiest first)</option>
+        <option value="dist-desc">Distance (longest first)</option>
+        <option value="dist-asc">Distance (shortest first)</option>
+      </select>
+    </div>
+
+    <div class="filter-section">
+      <span class="filter-title">Region</span>
+      <div class="check-list" id="regionFilters"></div>
+    </div>
+
+    <div class="filter-section">
+      <span class="filter-title">Difficulty</span>
+      <div class="diff-row" id="diffFilters">
+        <button class="diff-pill active" data-diff="1">1</button>
+        <button class="diff-pill active" data-diff="2">2</button>
+        <button class="diff-pill active" data-diff="3">3</button>
+        <button class="diff-pill active" data-diff="4">4</button>
+        <button class="diff-pill active" data-diff="5">5</button>
+      </div>
+    </div>
+
+    <div class="filter-section">
+      <span class="filter-title">Permit type</span>
+      <div class="check-list" id="permitFilters">
+        <label class="check-item"><input type="checkbox" checked value="lottery"> Lottery</label>
+        <label class="check-item"><input type="checkbox" checked value="reservation"> Reservation</label>
+        <label class="check-item"><input type="checkbox" checked value="walkup"> Walk-up OK</label>
+        <label class="check-item"><input type="checkbox" checked value="none"> No permit</label>
+      </div>
+    </div>
+
+    <div class="filter-section">
+      <div class="check-list">
+        <label class="check-item"><input type="checkbox" id="iconicOnly"> Iconic / bucket-list only</label>
+        <label class="check-item"><input type="checkbox" id="wantToDoOnly"> "Want to go" only</label>
+        <label class="check-item"><input type="checkbox" id="doneOnly"> "Been there" only</label>
+      </div>
+    </div>
+
+  </div>
+  <div class="sidebar-footer">
+    <div class="result-count"><strong id="filterCount">–</strong> trails shown</div>
+    <button class="btn-reset" id="resetFilters">Reset</button>
+  </div>
+</div>
+
+<div class="count-badge">
+  <strong id="trailCount">–</strong>
+  routes mapped
+</div>
+
+<div id="map"></div>
+
+<div class="legend">
+  <h4>Legend</h4>
+  <div class="row"><span class="dot iconic"></span> Iconic / bucket-list</div>
+  <div class="row"><span class="dot std"></span> Classic wilderness</div>
+  <div class="row"><span class="dot want" style="border:2px dashed #c88a28;background:transparent;"></span> Want to go</div>
+  <div class="row"><span class="dot done" style="border:2px solid #627f4f;background:transparent;"></span> Been there</div>
+  <div class="hint">Click any pin for details, difficulty, permits, and status tracking.</div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const STATUS_KEY = 'trails_status';
+
+function getStatus() {
+  try { return JSON.parse(localStorage.getItem(STATUS_KEY)) || {}; } catch { return {}; }
+}
+function setStatus(name, val) {
+  const s = getStatus();
+  if (s[name] === val) { delete s[name]; } else { s[name] = val; }
+  localStorage.setItem(STATUS_KEY, JSON.stringify(s));
+  applyFilters();
+  // refresh open popup if it's this trail
+  if (currentOpenTrail === name) openPopupFor(name);
+}
+
+let trails = [];
+let markers = [];
+let currentOpenTrail = null;
+
+const map = L.map('map', {
+  center: [42, -98], zoom: 5,
+  minZoom: 3, maxZoom: 12,
+  zoomControl: true, attributionControl: true
+});
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; OpenStreetMap &copy; CARTO',
+  subdomains: 'abcd', opacity: 0.55
+}).addTo(map);
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png', {
+  subdomains: 'abcd', opacity: 0.8
+}).addTo(map);
+
+function diffPips(n) {
+  let html = '<span class="difficulty">';
+  for (let i = 1; i <= 5; i++) {
+    const cls = i <= n ? (n >= 4 ? 'pip on hard' : 'pip on') : 'pip';
+    html += `<span class="${cls}"></span>`;
+  }
+  return html + '</span>';
+}
+
+function permitBadge(type) {
+  const labels = { lottery: 'Lottery', reservation: 'Reservation', walkup: 'Walk-up OK', none: 'No Permit' };
+  return `<span class="permit-badge ${type}">${labels[type]}</span>`;
+}
+
+function popupHTML(t) {
+  const s = getStatus();
+  const status = s[t.name];
+  return `
+    <div class="trail-card">
+      <div class="kicker">${t.iconic ? '★ Iconic Route' : 'Classic Wilderness'} &nbsp;·&nbsp; ${t.region}</div>
+      <h3>${t.name}</h3>
+      <div class="location">${t.location}</div>
+      <div class="stats">
+        <div class="stat"><span class="label">Distance</span><span class="value">${t.distance}</span></div>
+        <div class="stat"><span class="label">Duration</span><span class="value">${t.days}</span></div>
+        <div class="stat"><span class="label">Best Season</span><span class="value">${t.season}</span></div>
+        <div class="stat"><span class="label">Difficulty</span><span class="value">${diffPips(t.difficulty)}</span></div>
+      </div>
+      <div class="permit">${permitBadge(t.permit)}<strong>Permits:</strong> ${t.permitNote}</div>
+      <div class="trail-status">
+        <button class="status-btn ${status === 'want' ? 'active-want' : ''}" onclick="setStatus('${t.name.replace(/'/g,"\\'")}','want')">♡ Want to go</button>
+        <button class="status-btn ${status === 'done' ? 'active-done' : ''}" onclick="setStatus('${t.name.replace(/'/g,"\\'")}','done')">✓ Been there</button>
+      </div>
+    </div>`;
+}
+
+function makeIcon(t) {
+  const s = getStatus();
+  const status = s[t.name];
+  const cls = [
+    'trail-marker',
+    t.iconic ? 'iconic' : '',
+    status === 'want' ? 'status-want' : '',
+    status === 'done' ? 'status-done' : ''
+  ].filter(Boolean).join(' ');
+  return L.divIcon({ className: '', html: `<div class="${cls}"></div>`, iconSize: [18, 18], iconAnchor: [9, 9] });
+}
+
+function openPopupFor(name) {
+  const entry = markers.find(m => m.trail.name === name);
+  if (entry) {
+    entry.marker.setIcon(makeIcon(entry.trail));
+    entry.marker.getPopup().setContent(popupHTML(entry.trail));
+  }
+}
+
+// ── Build markers ──
+function buildMarkers() {
+  markers.forEach(({ marker }) => marker.remove());
+  markers = [];
+
+  trails.forEach(t => {
+    const marker = L.marker(t.coords, { icon: makeIcon(t), riseOnHover: true }).addTo(map);
+    const popup = L.popup({ closeButton: true, autoClose: true, closeOnClick: true, maxWidth: 340, offset: [0, -4] })
+      .setContent(popupHTML(t));
+    marker.bindPopup(popup);
+
+    marker.on('popupopen', () => { currentOpenTrail = t.name; });
+    marker.on('popupclose', () => { if (currentOpenTrail === t.name) currentOpenTrail = null; });
+
+    let hoverTimeout;
+    marker.on('mouseover', function() { clearTimeout(hoverTimeout); this.openPopup(); });
+    marker.on('mouseout', function() {
+      hoverTimeout = setTimeout(() => {
+        const el = this.getPopup().getElement();
+        if (!el || !el.matches(':hover')) this.closePopup();
+      }, 120);
+    });
+
+    markers.push({ marker, trail: t });
+  });
+}
+
+// ── Filter state ──
+function getFilterState() {
+  const activeRegions = new Set(
+    [...document.querySelectorAll('#regionFilters input:checked')].map(el => el.value)
+  );
+  const activeDiffs = new Set(
+    [...document.querySelectorAll('#diffFilters .diff-pill.active')].map(el => Number(el.dataset.diff))
+  );
+  const activePermits = new Set(
+    [...document.querySelectorAll('#permitFilters input:checked')].map(el => el.value)
+  );
+  return {
+    regions: activeRegions,
+    diffs: activeDiffs,
+    permits: activePermits,
+    iconicOnly: document.getElementById('iconicOnly').checked,
+    wantToDoOnly: document.getElementById('wantToDoOnly').checked,
+    doneOnly: document.getElementById('doneOnly').checked,
+    sortBy: document.getElementById('sortBy').value
+  };
+}
+
+function applyFilters() {
+  const f = getFilterState();
+  const s = getStatus();
+
+  let visible = trails.filter(t =>
+    f.regions.has(t.region) &&
+    f.diffs.has(t.difficulty) &&
+    f.permits.has(t.permit) &&
+    (!f.iconicOnly || t.iconic) &&
+    (!f.wantToDoOnly || s[t.name] === 'want') &&
+    (!f.doneOnly || s[t.name] === 'done')
+  );
+
+  // Sort
+  visible = [...visible].sort((a, b) => {
+    if (f.sortBy === 'name') return a.name.localeCompare(b.name);
+    if (f.sortBy === 'diff-asc') return a.difficulty - b.difficulty;
+    if (f.sortBy === 'diff-desc') return b.difficulty - a.difficulty;
+    if (f.sortBy === 'dist-asc') return a.distanceMiles - b.distanceMiles;
+    if (f.sortBy === 'dist-desc') return b.distanceMiles - a.distanceMiles;
+    return 0;
+  });
+
+  const visibleNames = new Set(visible.map(t => t.name));
+
+  markers.forEach(({ marker, trail }) => {
+    marker.setIcon(makeIcon(trail));
+    if (visibleNames.has(trail.name)) {
+      if (!map.hasLayer(marker)) marker.addTo(map);
+    } else {
+      if (map.hasLayer(marker)) marker.remove();
+    }
+  });
+
+  document.getElementById('filterCount').textContent = visible.length;
+}
+
+// ── Region checkboxes (built dynamically) ──
+function buildRegionFilters() {
+  const regions = [...new Set(trails.map(t => t.region))];
+  const container = document.getElementById('regionFilters');
+  regions.forEach(r => {
+    const label = document.createElement('label');
+    label.className = 'check-item';
+    label.innerHTML = `<input type="checkbox" checked value="${r}"> ${r}`;
+    container.appendChild(label);
+  });
+}
+
+// ── Event listeners ──
+function attachListeners() {
+  document.getElementById('sidebarToggle').addEventListener('click', () => {
+    const sb = document.getElementById('sidebar');
+    const btn = document.getElementById('sidebarToggle');
+    sb.classList.toggle('open');
+    btn.classList.toggle('active');
+    document.body.classList.toggle('sidebar-open');
+    setTimeout(() => map.invalidateSize(), 230);
+  });
+
+  document.getElementById('sortBy').addEventListener('change', applyFilters);
+
+  document.getElementById('regionFilters').addEventListener('change', applyFilters);
+  document.getElementById('permitFilters').addEventListener('change', applyFilters);
+  document.getElementById('iconicOnly').addEventListener('change', applyFilters);
+  document.getElementById('wantToDoOnly').addEventListener('change', applyFilters);
+  document.getElementById('doneOnly').addEventListener('change', applyFilters);
+
+  document.querySelectorAll('#diffFilters .diff-pill').forEach(btn => {
+    btn.addEventListener('click', () => {
+      btn.classList.toggle('active');
+      applyFilters();
+    });
+  });
+
+  document.getElementById('resetFilters').addEventListener('click', () => {
+    document.getElementById('sortBy').value = 'name';
+    document.querySelectorAll('#regionFilters input').forEach(el => el.checked = true);
+    document.querySelectorAll('#diffFilters .diff-pill').forEach(el => el.classList.add('active'));
+    document.querySelectorAll('#permitFilters input').forEach(el => el.checked = true);
+    document.getElementById('iconicOnly').checked = false;
+    document.getElementById('wantToDoOnly').checked = false;
+    document.getElementById('doneOnly').checked = false;
+    applyFilters();
+  });
+}
+
+// ── Bootstrap ──
+fetch('trails.json')
+  .then(r => r.json())
+  .then(data => {
+    trails = data;
+    document.getElementById('trailCount').textContent = trails.length;
+    document.getElementById('mastSub').textContent = `Hover or tap a marker · ${trails.length} routes`;
+
+    buildRegionFilters();
+    buildMarkers();
+    attachListeners();
+    applyFilters();
+
+    map.fitBounds([[24, -125], [72, -66]], { padding: [50, 50] });
+  })
+  .catch(err => {
+    console.error('Failed to load trails.json:', err);
+    document.getElementById('mastSub').textContent = 'Error loading trails — serve via HTTP';
+  });
+
+// Open sidebar by default on desktop
+if (window.innerWidth > 768) {
+  document.getElementById('sidebar').classList.add('open');
+  document.getElementById('sidebarToggle').classList.add('active');
+  document.body.classList.add('sidebar-open');
+}
+</script>
+</body>
+</html>
